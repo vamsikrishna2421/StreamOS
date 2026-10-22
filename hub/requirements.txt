@@ -1,0 +1,11 @@
+fastapi==0.160.0
+uvicorn[standard]
+httpx
+jinja2
+aiofiles
+websockets
+pydantic
+psutil
+# test-only
+pytest
+pytest-asyncio

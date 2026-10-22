@@ -1,0 +1,21 @@
+# runtime / generated
+.venv/
+scratch/
+*.pyc
+__pycache__/
+*.db
+*.db-wal
+*.db-shm
+.pytest_cache/
+
+# android/ios build outputs
+clients/android-tv/.gradle/
+clients/android-tv/build/
+clients/android-tv/app/build/
+clients/android-tv/local.properties
+clients/ios/build/
+*.apk
+*.ipa
+
+# os
+.DS_Store
