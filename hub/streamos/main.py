@@ -96,6 +96,14 @@ async def metrics_reset():
     return {"ok": True}
 
 
+@app.post("/api/relay/flush")
+async def relay_flush():
+    """Clear relay caches and active sessions (operator 'clear cache')."""
+    cleared = await app.state.relay.flush()
+    app.state.sessions = SessionManager()
+    return {"ok": True, **cleared}
+
+
 # --- sources -------------------------------------------------------------
 @app.get("/api/sources", response_model=list[SourceOut])
 async def list_sources(enabled_only: bool = False):

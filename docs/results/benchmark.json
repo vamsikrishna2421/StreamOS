@@ -1,0 +1,81 @@
+{
+  "generated_at": "2026-10-22T17:34:45Z",
+  "channel": "ch1",
+  "rows": [
+    {
+      "viewers": 1,
+      "direct_origin_segment_fetches": 10,
+      "shared_origin_segment_fetches": 10,
+      "upstream_fetch_reduction_pct": 0.0,
+      "shared_ttfs_avg_s": 0.024,
+      "shared_ttfs_max_s": 0.024,
+      "hub_downstream_serves": 10,
+      "hub_upstream_bytes": 2293602,
+      "hub_downstream_bytes": 2293224,
+      "hub_upstream_sessions": 1,
+      "hub_cpu_pct_during": 36.5,
+      "hub_rss_mb": 65.4,
+      "shared_wall_s": 0.0703
+    },
+    {
+      "viewers": 2,
+      "direct_origin_segment_fetches": 20,
+      "shared_origin_segment_fetches": 10,
+      "upstream_fetch_reduction_pct": 50.0,
+      "shared_ttfs_avg_s": 0.0145,
+      "shared_ttfs_max_s": 0.0147,
+      "hub_downstream_serves": 20,
+      "hub_upstream_bytes": 2293980,
+      "hub_downstream_bytes": 4586448,
+      "hub_upstream_sessions": 1,
+      "hub_cpu_pct_during": 27.8,
+      "hub_rss_mb": 66.5,
+      "shared_wall_s": 0.0789
+    },
+    {
+      "viewers": 3,
+      "direct_origin_segment_fetches": 30,
+      "shared_origin_segment_fetches": 10,
+      "upstream_fetch_reduction_pct": 66.7,
+      "shared_ttfs_avg_s": 0.0145,
+      "shared_ttfs_max_s": 0.0149,
+      "hub_downstream_serves": 30,
+      "hub_upstream_bytes": 2294358,
+      "hub_downstream_bytes": 6879672,
+      "hub_upstream_sessions": 1,
+      "hub_cpu_pct_during": 29.1,
+      "hub_rss_mb": 68.8,
+      "shared_wall_s": 0.0948
+    },
+    {
+      "viewers": 5,
+      "direct_origin_segment_fetches": 50,
+      "shared_origin_segment_fetches": 10,
+      "upstream_fetch_reduction_pct": 80.0,
+      "shared_ttfs_avg_s": 0.0256,
+      "shared_ttfs_max_s": 0.028,
+      "hub_downstream_serves": 50,
+      "hub_upstream_bytes": 2295114,
+      "hub_downstream_bytes": 11466120,
+      "hub_upstream_sessions": 1,
+      "hub_cpu_pct_during": 30.8,
+      "hub_rss_mb": 65.8,
+      "shared_wall_s": 0.1349
+    },
+    {
+      "viewers": 10,
+      "direct_origin_segment_fetches": 100,
+      "shared_origin_segment_fetches": 10,
+      "upstream_fetch_reduction_pct": 90.0,
+      "shared_ttfs_avg_s": 0.0352,
+      "shared_ttfs_max_s": 0.0635,
+      "hub_downstream_serves": 100,
+      "hub_upstream_bytes": 2293602,
+      "hub_downstream_bytes": 22932240,
+      "hub_upstream_sessions": 1,
+      "hub_cpu_pct_during": 28.4,
+      "hub_rss_mb": 68.3,
+      "shared_wall_s": 0.2412
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+name: StreamOS
+options:
+  bundleIdPrefix: os.stream
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  StreamOS:
+    type: application
+    platform: iOS
+    sources: [StreamOS]
+    info:
+      path: StreamOS/Info.plist
+      properties:
+        CFBundleDisplayName: StreamOS
+        UILaunchScreen: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: os.stream.ios
+        TARGETED_DEVICE_FAMILY: "1,2"

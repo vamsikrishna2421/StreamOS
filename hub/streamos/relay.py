@@ -79,6 +79,18 @@ class Relay:
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    async def flush(self) -> dict:
+        """Drop all caches and sessions. Operator 'clear cache' action; also
+        gives experiments a cold start between runs."""
+        async with self._state_lock:
+            n_sessions = len(self._sessions)
+            n_seg = len(self._seg_cache)
+            self._sessions.clear()
+            self._seg_cache.clear()
+            self._pl_cache.clear()
+            self._seg_locks.clear()
+        return {"cleared_sessions": n_sessions, "cleared_segments": n_seg}
+
     # --- session accounting ---------------------------------------------
     def upstream_count(self) -> int:
         return len(self._sessions)

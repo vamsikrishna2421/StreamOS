@@ -1,0 +1,39 @@
+# Self-contained StreamOS demo: generates synthetic content, serves it from the
+# test origin, and runs the hub. No real provider is involved.
+#
+#   docker compose up --build
+#   open http://localhost:8099  (add source http://origin:8100/ch1/index.m3u8)
+
+services:
+  content:
+    build: .
+    command: python testkit/make_content.py --root /content
+    volumes:
+      - content:/content
+
+  origin:
+    build: .
+    command: python testkit/origin.py --content /content --port 8100
+    depends_on:
+      content:
+        condition: service_completed_successfully
+    volumes:
+      - content:/content
+    ports:
+      - "8100:8100"
+
+  hub:
+    build: .
+    environment:
+      STREAMOS_DATA: /data
+      STREAMOS_MAX_UPSTREAM: "2"
+    depends_on:
+      - origin
+    volumes:
+      - hubdata:/data
+    ports:
+      - "8099:8099"
+
+volumes:
+  content:
+  hubdata:
