@@ -335,6 +335,10 @@ async function playSource(sourceId, name) {
     const url = res.play_url;
     if (hls) { hls.destroy(); hls = null; }
     video.removeAttribute("src"); video.load();
+    // never fail silently: if the browser can't decode this file, say so
+    video.onerror = () =>
+      toast("This file can't be played in the browser. Try an .mp4 (H.264).");
+    video.onplaying = () => { video.onerror = null; };
     const isHls = url.includes(".m3u8");
     if (isHls && window.Hls && Hls.isSupported()) {
       hls = new Hls({ enableWorker: true });
@@ -346,7 +350,9 @@ async function playSource(sourceId, name) {
       // direct file (local movie) or native-HLS browser (Safari)
       video.src = url;
     }
-    video.play().catch(() => {});
+    // Safari drops the click's activation across our awaited calls; if autoplay
+    // is refused, the visible controls let the user start it manually.
+    video.play().catch(() => toast("Press the play button to start."));
     startHeartbeat(video);
   } catch (e) { toast(e.message); }
 }

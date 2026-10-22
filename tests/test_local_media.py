@@ -54,6 +54,28 @@ async def test_media_full_and_range_requests(hub_media):
     assert mid.content == (bytes(range(256)) * 40)[100:200]
 
 
+async def test_media_suffix_range_returns_tail(hub_media):
+    """bytes=-N must return the LAST N bytes (needed by Safari to read the
+    trailing moov atom of a normal .mp4), not the first N."""
+    sources = (await hub_media.get("/api/sources")).json()
+    cid = next(s for s in sources if s["name"] == "clip")["id"]
+    data = bytes(range(256)) * 40  # the fixture's exact bytes, len 10240
+
+    r = await hub_media.get(f"/media/{cid}", headers={"Range": "bytes=-100"})
+    assert r.status_code == 206
+    assert r.headers["content-range"] == "bytes 10140-10239/10240"
+    assert r.content == data[-100:]
+
+
+async def test_media_open_ended_range(hub_media):
+    sources = (await hub_media.get("/api/sources")).json()
+    cid = next(s for s in sources if s["name"] == "clip")["id"]
+    r = await hub_media.get(f"/media/{cid}", headers={"Range": "bytes=10200-"})
+    assert r.status_code == 206
+    assert r.headers["content-range"] == "bytes 10200-10239/10240"
+    assert len(r.content) == 40
+
+
 async def test_media_unsatisfiable_range(hub_media):
     sources = (await hub_media.get("/api/sources")).json()
     cid = next(s for s in sources if s["name"] == "clip")["id"]

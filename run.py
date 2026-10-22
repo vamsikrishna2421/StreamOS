@@ -122,11 +122,19 @@ def main() -> None:
 
     host = "0.0.0.0" if args.lan else "127.0.0.1"
     port = free_port(args.port)
+    lan_ip = _lan_ip() if args.lan else None
 
     env = dict(os.environ)
     env["STREAMOS_DATA"] = str((ROOT / ".streamos-data").resolve())
     if media:
         env["STREAMOS_MEDIA"] = media
+    if args.lan and lan_ip:
+        # the hub only answers Host headers it is told to trust (blocks DNS
+        # rebinding); allow the LAN IP so other devices can reach it
+        env["STREAMOS_ALLOWED_HOSTS"] = lan_ip
+    if args.lan and platform.system() == "Windows":
+        say("Windows may ask to allow Python through the firewall — click "
+            "Allow, and choose 'Private networks' (not Public).")
 
     cmd = [str(py), "-m", "uvicorn", "streamos.main:app",
            "--app-dir", str(ROOT / "hub"), "--host", host, "--port", str(port),
@@ -142,10 +150,10 @@ def main() -> None:
 
     print("-" * 40)
     print(f"  StreamOS is running.  Open:  {local_url}")
-    if args.lan:
-        ip = _lan_ip()
-        if ip:
-            print(f"  On other devices (same Wi-Fi):  http://{ip}:{port}")
+    if args.lan and lan_ip:
+        print(f"  On other devices (same Wi-Fi):  http://{lan_ip}:{port}")
+        print("  (If another device can't connect, allow Python through your "
+              "firewall.)")
     print("  Press Ctrl+C here to stop.")
     print("-" * 40 + "\n")
 

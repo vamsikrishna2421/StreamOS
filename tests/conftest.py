@@ -72,6 +72,7 @@ async def hub(origin_server, tmp_path, monkeypatch):
     monkeypatch.setenv("STREAMOS_MAX_UPSTREAM", "2")
     monkeypatch.setenv("STREAMOS_PLAYLIST_TTL", "0.5")
     monkeypatch.setenv("STREAMOS_SAMPLES", "0")
+    monkeypatch.setenv("STREAMOS_ALLOWED_HOSTS", "hub")
     # import fresh so settings pick up env
     import importlib
     import streamos.config as cfg
@@ -100,6 +101,7 @@ async def hub_media(origin_server, tmp_path, monkeypatch):
     monkeypatch.setenv("STREAMOS_MEDIA", str(media.resolve()))
     monkeypatch.setenv("STREAMOS_MAX_UPSTREAM", "2")
     monkeypatch.setenv("STREAMOS_SAMPLES", "0")
+    monkeypatch.setenv("STREAMOS_ALLOWED_HOSTS", "hub")
     import importlib
     import streamos.config as cfg
     import streamos.main as main
@@ -110,6 +112,8 @@ async def hub_media(origin_server, tmp_path, monkeypatch):
     async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(transport=transport,
                                      base_url="http://hub") as client:
+            # the startup scan is now backgrounded; settle it deterministically
+            await client.post("/api/library/rescan")
             client.clip = clip  # type: ignore[attr-defined]
             yield client
 

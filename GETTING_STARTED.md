@@ -21,7 +21,9 @@ To watch my own movies, run this instead:  python run.py --media "/path/to/my/Mo
 ```
 
 ## Step 3 — watch
-A browser tab opens at `http://127.0.0.1:8099`. You will see a **Welcome**
+A browser tab opens at the address the launcher prints (usually
+`http://127.0.0.1:8099` — if that port is busy it picks another and prints the
+real one). You will see a **Welcome**
 video already there — click it to confirm playback works. If you pointed it
 at your movies folder, your films appear under **Movies** and on the **Home**
 screen. Click one. Use the on-screen controls to play, pause, and seek.
@@ -34,8 +36,11 @@ it down.
 ## What you can watch
 - **The bundled welcome clip** — always there, proves it works.
 - **Your own video files** — point `--media` at a folder of movies you own.
-  Files that play in a normal browser work directly: `.mp4`, `.m4v`, `.mov`,
-  `.webm`. (`.mkv`/`.avi` are not shown yet — they need conversion first.)
+  Best compatibility (every browser, including Safari): `.mp4`, `.m4v`, `.mov`
+  with H.264 video. `.webm` also works in Chrome/Edge/Firefox. Other formats
+  (`.mkv`, `.avi`, `.ogv`) are not listed yet — they need converting to `.mp4`
+  first (ask Claude Code to do it). If a file won't play, the app now tells you
+  instead of just sitting blank.
 - **Live TV / IPTV from your provider** — **not enabled.** That requires
   confirming what your provider permits first; see `PROVIDER_INTEGRATION.md`.
   Everything else works without it.
@@ -44,7 +49,12 @@ it down.
 Run `python run.py --lan`. It prints a second address like
 `http://192.168.x.x:8099`. Open that on your phone or TV **on the same
 Wi-Fi**. If two devices play the same thing, the hub fetches it once and
-shares it. (Only use `--lan` on a network you trust — it has no password yet.)
+shares it.
+
+- On **Windows**, the first time you use `--lan` a firewall box pops up —
+  click **Allow**, and choose **Private networks**, not Public. If you miss
+  it, other devices get "can't connect."
+- Only use `--lan` on a network you trust — it has no password yet.
 
 ## If something goes wrong
 Tell Claude Code in the same session, in plain words:

@@ -57,22 +57,66 @@ async def lifespan(app: FastAPI):
     app.state.sessions = SessionManager()
     app.state.devices = DeviceManager(db)
     app.state.library = Library(db, settings.media_dirs())
-    try:
-        app.state.library.scan()
-    except Exception:  # noqa: BLE001 - a bad media dir must not stop the hub
-        METRICS.add("errors")
+
+    async def _initial_scan():
+        # Run off the startup critical path and in a worker thread: scanning a
+        # large Movies folder must never delay /api/health (the launcher gives
+        # up after 40s) or block the event loop.
+        try:
+            await asyncio.to_thread(app.state.library.scan)
+        except Exception:  # noqa: BLE001 - a bad media dir must not stop the hub
+            METRICS.add("errors")
+
+    scan_task = asyncio.create_task(_initial_scan())
     task = asyncio.create_task(_reaper(app))
     try:
         yield
     finally:
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        for t in (task, scan_task):
+            t.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await t
         await app.state.relay.aclose()
         db.close()
 
 
 app = FastAPI(title="StreamOS Hub", version="0.3.0", lifespan=lifespan)
+
+
+def _allowed_hosts() -> list[str]:
+    # Loopback by default; run.py adds the LAN IP (and tests add "hub") via
+    # STREAMOS_ALLOWED_HOSTS. This is the DNS-rebinding defence: a rebinding
+    # page reaches the hub only with its own Host header, which is rejected.
+    base = ["localhost", "127.0.0.1"]
+    extra = os.environ.get("STREAMOS_ALLOWED_HOSTS", "")
+    base += [h.strip() for h in extra.split(",") if h.strip()]
+    return base
+
+
+from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
+from starlette.middleware.trustedhost import TrustedHostMiddleware  # noqa: E402
+
+
+@app.middleware("http")
+async def _block_cross_origin_writes(request: Request, call_next):
+    """Reject state-changing requests carrying a foreign Origin (CSRF / a
+    rebinding page that slipped a Host through). Reads are unaffected so media
+    still plays."""
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        origin = request.headers.get("origin")
+        if origin:
+            allowed = set(_allowed_hosts())
+            try:
+                from urllib.parse import urlparse
+                host = urlparse(origin).hostname or ""
+            except ValueError:
+                host = ""
+            if host and host not in allowed:
+                return Response(status_code=403, content="cross-origin request refused")
+    return await call_next(request)
+
+
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_allowed_hosts() + ["*.localhost"])
 
 
 # --- health & metrics ----------------------------------------------------
@@ -121,6 +165,12 @@ async def list_sources(enabled_only: bool = False):
 
 @app.post("/api/sources", response_model=SourceOut)
 async def create_source(body: SourceIn):
+    url = body.upstream_url.strip()
+    if not (url.startswith("http://") or url.startswith("https://")):
+        # Local files are registered by the library scanner, never via the
+        # API — this blocks file:// (arbitrary-file read) and other schemes.
+        raise HTTPException(
+            400, "upstream_url must be http(s); add local files via a media folder")
     return app.state.registry.create(body.model_dump())
 
 
@@ -269,7 +319,7 @@ def _ranged_file(path: Path, range_header: str | None) -> Response:
     ctype = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
     base_headers = {"Accept-Ranges": "bytes"}
 
-    if not range_header or not range_header.strip().lower().startswith("bytes="):
+    def full_response():
         def full():
             with open(path, "rb") as f:
                 while chunk := f.read(_CHUNK):
@@ -277,13 +327,27 @@ def _ranged_file(path: Path, range_header: str | None) -> Response:
         return StreamingResponse(full(), media_type=ctype,
                                  headers={**base_headers, "Content-Length": str(size)})
 
+    if not range_header or not range_header.strip().lower().startswith("bytes="):
+        return full_response()
+
+    # Parse a single byte range. Handles the three RFC 7233 forms:
+    #   bytes=START-END   bytes=START-   bytes=-SUFFIX (the LAST SUFFIX bytes)
+    # Anything malformed or multi-range falls back to serving the whole file.
+    rng = range_header.split("=", 1)[1].strip()
+    if "," in rng:                      # multi-range unsupported; serve whole file
+        return full_response()
     try:
-        rng = range_header.split("=", 1)[1]
-        start_s, end_s = rng.split("-", 1)
-        start = int(start_s) if start_s else 0
-        end = int(end_s) if end_s else size - 1
-    except (ValueError, IndexError):
-        start, end = 0, size - 1
+        if rng.startswith("-"):         # suffix: final N bytes
+            n = int(rng[1:])
+            if n <= 0:
+                raise ValueError("empty suffix")
+            start, end = max(0, size - n), size - 1
+        else:
+            start_s, _, end_s = rng.partition("-")
+            start = int(start_s)
+            end = int(end_s) if end_s else size - 1
+    except ValueError:
+        return full_response()
 
     if size == 0 or start >= size or start < 0 or start > end:
         return Response(status_code=416,
@@ -311,8 +375,10 @@ async def media_file(source_id: str, request: Request):
     if source is None or not is_local(source):
         raise HTTPException(404, "unknown local source")
     path = local_path(source)
-    # defence in depth: only ever serve inside a configured media root
-    if not path.is_file() or not app.state.library.contains(path):
+    # defence in depth: only ever serve a playable file inside a media root
+    from .library import PLAYABLE
+    if (not path.is_file() or not app.state.library.contains(path)
+            or path.suffix.lower() not in PLAYABLE):
         raise HTTPException(404, "media file not found")
     return _ranged_file(path, request.headers.get("range"))
 

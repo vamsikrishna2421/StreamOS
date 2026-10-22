@@ -64,6 +64,9 @@ class DB:
         self._conn = sqlite3.connect(self._path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
+        # NORMAL is durable under WAL and avoids an fsync per INSERT, which
+        # matters when the library scanner adds many files at once.
+        self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(SCHEMA)
         self._conn.commit()
@@ -93,6 +96,14 @@ class DB:
     def query_one(self, sql: str, params: tuple = ()):
         with self._lock:
             return self._conn.execute(sql, params).fetchone()
+
+    def execute_many(self, sql: str, rows: list[tuple]) -> None:
+        """Run many writes in a single transaction (one commit)."""
+        if not rows:
+            return
+        with self._lock:
+            self._conn.executemany(sql, rows)
+            self._conn.commit()
 
     # --- watch history ---------------------------------------------------
     def upsert_history(self, profile_id: str, source_id: str,

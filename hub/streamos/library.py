@@ -18,9 +18,17 @@ from pathlib import Path
 
 from .db import DB
 
-# Extensions a mainstream desktop browser plays without transcoding.
-PLAYABLE = {".mp4", ".m4v", ".mov", ".webm", ".ogv", ".ogg"}
+# Extensions a mainstream desktop browser plays without transcoding. Limited
+# to the broadly-supported set (H.264/AAC in mp4/m4v/mov, plus webm); .ogv/.ogg
+# are excluded because Safari cannot decode them, which would show a card that
+# silently fails. app.js also surfaces a message if any file fails to decode.
+PLAYABLE = {".mp4", ".m4v", ".mov", ".webm"}
 LOCAL_PREFIX = "file://"
+
+# Directory names to skip while scanning: hidden dirs and macOS media-library
+# bundles (each can contain thousands of internal files).
+_SKIP_DIR_SUFFIXES = (".photoslibrary", ".tvlibrary", ".imovielibrary",
+                      ".theater", ".fcpbundle", ".app")
 
 
 def is_local(source: dict) -> bool:
@@ -61,29 +69,36 @@ class Library:
         Idempotent — safe to call repeatedly."""
         found: dict[str, Path] = {}
         for root in self.roots:
-            for dirpath, _dirs, files in os.walk(root):
+            for dirpath, dirs, files in os.walk(root):
+                # prune hidden dirs and library bundles in place so os.walk
+                # never descends into them
+                dirs[:] = [d for d in dirs
+                           if not d.startswith(".")
+                           and not d.lower().endswith(_SKIP_DIR_SUFFIXES)]
                 for fn in files:
+                    if fn.startswith("."):
+                        continue
                     ext = os.path.splitext(fn)[1].lower()
                     if ext in PLAYABLE:
                         p = Path(dirpath) / fn
                         found[_stable_id(p)] = p
 
-        # upsert found files
-        added = 0
-        for sid, p in found.items():
-            exists = self.db.query_one("SELECT id FROM sources WHERE id=?", (sid,))
-            if exists:
-                continue
-            group = self._group_for(p)
-            self.db.execute(
-                "INSERT INTO sources"
-                "(id,name,kind,upstream_url,max_sessions,shareable,logo,"
-                " group_name,enabled,created_at) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?)",
-                (sid, p.stem, "vod", f"{LOCAL_PREFIX}{p}", 1, 1, None,
-                 group, 1, 0.0),
-            )
-            added += 1
+        # upsert found files in one transaction (not one fsync per file)
+        existing = {r["id"] for r in
+                    self.db.query("SELECT id FROM sources WHERE upstream_url LIKE ?",
+                                  (f"{LOCAL_PREFIX}%",))}
+        new_rows = [
+            (sid, p.stem, "vod", f"{LOCAL_PREFIX}{p}", 1, 1, None,
+             self._group_for(p), 1, 0.0)
+            for sid, p in found.items() if sid not in existing
+        ]
+        self.db.execute_many(
+            "INSERT OR IGNORE INTO sources"
+            "(id,name,kind,upstream_url,max_sessions,shareable,logo,"
+            " group_name,enabled,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            new_rows,
+        )
+        added = len(new_rows)
 
         # prune local sources whose files are gone or now outside roots
         removed = 0

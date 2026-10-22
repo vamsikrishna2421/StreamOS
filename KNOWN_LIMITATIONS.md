@@ -32,13 +32,19 @@ hidden behind a passing test.
   integration is defined.
 
 ## Security
-- **Admin/control API is unauthenticated.** Intended for a trusted LAN. Before
-  any internet exposure it needs auth on `/api/sources`, `/api/relay/flush`,
-  pairing, and TLS. Do not port-forward the hub as-is.
+- **Protected against the browser-based attacks, but not yet token-authed.**
+  The hub now enforces a **Host allowlist** (blocks DNS-rebinding), **refuses
+  cross-origin writes** (blocks CSRF from a random web page), restricts
+  `upstream_url` to `http(s)` (no `file://` arbitrary-file read via the API),
+  and only serves playable files inside a configured media root. What is still
+  missing: a **per-install access token**. So on `--lan`, any device already
+  on your trusted Wi-Fi can use the API without a password. Keep the hub on a
+  network you trust; do not port-forward it to the internet (use a VPN). TLS
+  is also not yet configured.
 - **Pairing** proves possession of a code shown on the hub, but the transport
   is plain HTTP on the LAN; a hostile LAN is not in the threat model yet.
-- **No per-device authorization on media URLs** — any LAN client that knows
-  `/live/{sid}/…` can fetch while a session is open.
+- **No per-device authorization on media URLs** — any device on the allowed
+  network that knows `/live/{sid}/…` or `/media/{id}` can fetch while valid.
 
 ## UX / features
 - Favorites are stored client-side (localStorage), not yet synced via the
