@@ -8,15 +8,18 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import mimetypes
+import os
 from pathlib import Path
 
 import psutil
-from fastapi import FastAPI, HTTPException, Response
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import load_settings
 from .db import DB
+from .library import Library, is_local, local_path
 from .metrics import METRICS
 from .models import (AllocResult, DeviceOut, DevicePairComplete, DevicePairStart,
                      HistoryIn, SourceIn, SourceOut)
@@ -25,6 +28,7 @@ from .sessions import DeviceManager, SessionManager
 from .sources import SourceRegistry
 
 WEB_DIR = Path(__file__).parent / "web"
+_CHUNK = 256 * 1024
 
 
 async def _reaper(app: FastAPI) -> None:
@@ -52,6 +56,11 @@ async def lifespan(app: FastAPI):
     app.state.relay = Relay(settings)
     app.state.sessions = SessionManager()
     app.state.devices = DeviceManager(db)
+    app.state.library = Library(db, settings.media_dirs())
+    try:
+        app.state.library.scan()
+    except Exception:  # noqa: BLE001 - a bad media dir must not stop the hub
+        METRICS.add("errors")
     task = asyncio.create_task(_reaper(app))
     try:
         yield
@@ -160,6 +169,20 @@ async def play(device_id: str, source_id: str):
     if source is None or not source["enabled"]:
         raise HTTPException(404, "unknown or disabled source")
 
+    # Local files are served directly with range support — no upstream
+    # session, no relay, no concurrency cap. They are the user's own media.
+    if is_local(source):
+        path = local_path(source)
+        if not path.is_file() or not app.state.library.contains(path):
+            raise HTTPException(404, "media file not found")
+        vs = app.state.sessions.start(device_id, source_id, mode="local")
+        app.state.devices.touch(device_id)
+        return AllocResult(
+            ok=True, mode="local", source_id=source_id,
+            play_url=f"/media/{source_id}",
+            upstream_sessions=app.state.relay.upstream_count(),
+        )
+
     already_open = source_id in {s["source_id"]
                                  for s in app.state.relay.sessions_view()}
     try:
@@ -230,6 +253,68 @@ async def get_history(profile_id: str = "default", limit: int = 20):
         (profile_id, limit),
     )
     return [dict(r) for r in rows]
+
+
+# --- local media library -------------------------------------------------
+@app.post("/api/library/rescan")
+async def library_rescan():
+    return app.state.library.scan()
+
+
+def _ranged_file(path: Path, range_header: str | None) -> Response:
+    """Serve a file with HTTP range support so players can seek. Returns 206
+    for a valid Range, 200 for the whole file, 416 for an unsatisfiable range.
+    Streams in chunks — never reads the whole movie into memory."""
+    size = path.stat().st_size
+    ctype = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+    base_headers = {"Accept-Ranges": "bytes"}
+
+    if not range_header or not range_header.strip().lower().startswith("bytes="):
+        def full():
+            with open(path, "rb") as f:
+                while chunk := f.read(_CHUNK):
+                    yield chunk
+        return StreamingResponse(full(), media_type=ctype,
+                                 headers={**base_headers, "Content-Length": str(size)})
+
+    try:
+        rng = range_header.split("=", 1)[1]
+        start_s, end_s = rng.split("-", 1)
+        start = int(start_s) if start_s else 0
+        end = int(end_s) if end_s else size - 1
+    except (ValueError, IndexError):
+        start, end = 0, size - 1
+
+    if size == 0 or start >= size or start < 0 or start > end:
+        return Response(status_code=416,
+                        headers={**base_headers, "Content-Range": f"bytes */{size}"})
+    end = min(end, size - 1)
+    length = end - start + 1
+
+    def ranged():
+        with open(path, "rb") as f:
+            f.seek(start)
+            remaining = length
+            while remaining > 0 and (chunk := f.read(min(_CHUNK, remaining))):
+                remaining -= len(chunk)
+                yield chunk
+
+    return StreamingResponse(
+        ranged(), status_code=206, media_type=ctype,
+        headers={**base_headers, "Content-Length": str(length),
+                 "Content-Range": f"bytes {start}-{end}/{size}"})
+
+
+@app.get("/media/{source_id}")
+async def media_file(source_id: str, request: Request):
+    source = app.state.registry.get(source_id)
+    if source is None or not is_local(source):
+        raise HTTPException(404, "unknown local source")
+    path = local_path(source)
+    # defence in depth: only ever serve inside a configured media root
+    if not path.is_file() or not app.state.library.contains(path):
+        raise HTTPException(404, "media file not found")
+    return _ranged_file(path, request.headers.get("range"))
 
 
 # --- relay media endpoints ----------------------------------------------

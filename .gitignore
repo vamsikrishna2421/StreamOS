@@ -1,5 +1,6 @@
 # runtime / generated
 .venv/
+.streamos-data/
 scratch/
 *.pyc
 __pycache__/

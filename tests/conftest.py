@@ -71,6 +71,7 @@ async def hub(origin_server, tmp_path, monkeypatch):
     monkeypatch.setenv("STREAMOS_DATA", str(tmp_path / "hubdata"))
     monkeypatch.setenv("STREAMOS_MAX_UPSTREAM", "2")
     monkeypatch.setenv("STREAMOS_PLAYLIST_TTL", "0.5")
+    monkeypatch.setenv("STREAMOS_SAMPLES", "0")
     # import fresh so settings pick up env
     import importlib
     import streamos.config as cfg
@@ -83,6 +84,33 @@ async def hub(origin_server, tmp_path, monkeypatch):
         async with httpx.AsyncClient(transport=transport,
                                      base_url="http://hub") as client:
             client.origin = origin_server  # type: ignore[attr-defined]
+            yield client
+
+
+@pytest_asyncio.fixture
+async def hub_media(origin_server, tmp_path, monkeypatch):
+    """Hub with a local media folder containing one dummy video file. The
+    bytes are not a real codec — enough to exercise registration, the
+    /media range server, and local-source play routing."""
+    media = tmp_path / "movies"
+    media.mkdir()
+    clip = media / "clip.mp4"
+    clip.write_bytes(bytes(range(256)) * 40)   # 10240 bytes, deterministic
+    monkeypatch.setenv("STREAMOS_DATA", str(tmp_path / "hubdata"))
+    monkeypatch.setenv("STREAMOS_MEDIA", str(media.resolve()))
+    monkeypatch.setenv("STREAMOS_MAX_UPSTREAM", "2")
+    monkeypatch.setenv("STREAMOS_SAMPLES", "0")
+    import importlib
+    import streamos.config as cfg
+    import streamos.main as main
+    importlib.reload(cfg)
+    importlib.reload(main)
+    app = main.app
+    transport = httpx.ASGITransport(app=app)
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport,
+                                     base_url="http://hub") as client:
+            client.clip = clip  # type: ignore[attr-defined]
             yield client
 
 

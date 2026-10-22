@@ -1,5 +1,9 @@
 # StreamOS
 
+> **Just want to watch something on your laptop?** Read
+> **[GETTING_STARTED.md](GETTING_STARTED.md)** — one prompt, one command, no
+> technical steps.
+
 A local **household streaming hub**. It takes the authorized streams you
 already have the right to watch and makes them behave like a modern media
 platform across every screen in the house: one upstream source can feed many

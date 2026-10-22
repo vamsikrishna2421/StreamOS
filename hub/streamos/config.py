@@ -55,6 +55,25 @@ class Settings:
     def cache_dir(self) -> Path:
         return self.data_dir / "cache"
 
+    def media_dirs(self) -> list[Path]:
+        """Folders of the user's own video files to offer for playback.
+        STREAMOS_MEDIA is a path-list (':'/';' or ',' separated). The bundled
+        samples folder is always included so there is something to play even
+        with no setup."""
+        raw = os.environ.get("STREAMOS_MEDIA", "")
+        parts: list[str] = []
+        for chunk in raw.replace(os.pathsep, ",").split(","):
+            chunk = chunk.strip()
+            if chunk:
+                parts.append(chunk)
+        dirs = [Path(p) for p in parts]
+        # repo samples dir: hub/streamos/config.py -> parents[2] == repo root.
+        # Included by default so there is always something to play; set
+        # STREAMOS_SAMPLES=0 to omit it (used by the test suite).
+        if os.environ.get("STREAMOS_SAMPLES", "1").lower() not in ("0", "false", "off"):
+            dirs.append(Path(__file__).resolve().parents[2] / "samples")
+        return dirs
+
 
 def load_settings() -> Settings:
     s = Settings()

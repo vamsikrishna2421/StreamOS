@@ -334,13 +334,18 @@ async function playSource(sourceId, name) {
     document.getElementById("player").classList.add("open");
     const url = res.play_url;
     if (hls) { hls.destroy(); hls = null; }
-    if (window.Hls && Hls.isSupported()) {
+    video.removeAttribute("src"); video.load();
+    const isHls = url.includes(".m3u8");
+    if (isHls && window.Hls && Hls.isSupported()) {
       hls = new Hls({ enableWorker: true });
       hls.on(Hls.Events.ERROR, (_e, d) =>
         console.log(`HLS_ERR ${d.type} ${d.details} fatal=${d.fatal}`));
       hls.loadSource(url); hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
-    } else { video.src = url; }  // Safari / native HLS
+    } else {
+      // direct file (local movie) or native-HLS browser (Safari)
+      video.src = url;
+    }
     video.play().catch(() => {});
     startHeartbeat(video);
   } catch (e) { toast(e.message); }
